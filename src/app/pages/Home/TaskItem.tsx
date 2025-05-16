@@ -1,12 +1,15 @@
 'use client'
 
-import { ChangeEvent, useCallback, useMemo, useRef, useState } from 'react'
-import { debounce } from '@/utils'
+import { ChangeEvent, SyntheticEvent, useCallback, useMemo, useRef, useState } from 'react'
+import { debounce, toLocalDatetimeInputValue } from '@/utils'
 import { deleteTask, patchTask } from './actions'
 import { Task } from './types'
+import { useAtom } from 'jotai'
+import { tasksAtom } from './TaskList'
 
 export function TaskItem({ task }: { task: Task }) {
   const updateFormRef = useRef<HTMLFormElement>(null)
+  const [, setTasks] = useAtom(tasksAtom)
 
   const [name, setName] = useState(task.name || '')
   const [description, setDescription] = useState(task.description || '')
@@ -39,7 +42,8 @@ export function TaskItem({ task }: { task: Task }) {
 
   const handleChangeDueAt = useCallback(
     (event: ChangeEvent<HTMLInputElement>) => {
-      setDueAt(event.target.value)
+      const localDate = new Date(event.target.value) // assumes local time
+      setDueAt(localDate.toISOString()) // store as UTC ISO
       debouncedSave()
     },
     [debouncedSave]
@@ -59,11 +63,20 @@ export function TaskItem({ task }: { task: Task }) {
 
   const onPatch = useCallback(async (formData: FormData) => {
     const updatedTask = await patchTask(formData)
-    setName(updatedTask.name || '')
-    setDescription(updatedTask.description || '')
-    setDueAt(updatedTask.dueAt || '')
     setProbability(updatedTask.probability || '')
   }, [])
+
+  const handleDelete = (e: SyntheticEvent) => {
+    e.preventDefault()
+
+    // Remove the task from state first
+    setTasks((oldTaskList) => oldTaskList.filter((oldTask) => oldTask.id !== task.id))
+
+    // Then use the deleteTask action to send a delete API call to persist the change
+    const form = new FormData()
+    form.set('id', task.id.toString())
+    deleteTask(form)
+  }
 
   return (
     <div data-id={task.id} className="relative border border-neutral-400 p-4 rounded shadow">
@@ -88,7 +101,7 @@ export function TaskItem({ task }: { task: Task }) {
               <input
                 name="dueAt"
                 type="datetime-local"
-                value={new Date(dueAt).toISOString().slice(0, 16)}
+                value={toLocalDatetimeInputValue(dueAt)}
                 onChange={handleChangeDueAt}
                 onBlur={handleFieldBlur}
                 className="outline-0 border border-transparent hover:border-neutral-300 focus:border-neutral-600 rounded"
@@ -101,7 +114,7 @@ export function TaskItem({ task }: { task: Task }) {
                 type="number"
                 min={0}
                 max={100}
-                value={probability}
+                value={probability || 0}
                 onChange={handleChangeProbability}
                 onBlur={handleFieldBlur}
                 className="outline-0 border border-transparent hover:border-neutral-300 focus:border-neutral-600 rounded"
@@ -119,7 +132,7 @@ export function TaskItem({ task }: { task: Task }) {
           />
         </div>
       </form>
-      <form action={deleteTask} className="absolute top-4 right-4">
+      <form onSubmit={handleDelete} className="absolute top-4 right-4">
         <input name="id" hidden value={task.id} readOnly />
         <button className="px-2 py-0.5 border border-red-600 text-red-600 rounded text-xs font-semibold cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed">
           {'Remove'}

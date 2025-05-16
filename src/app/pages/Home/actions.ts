@@ -37,6 +37,7 @@ export async function patchTask(formData: FormData) {
   const id = formData.get('id') as string
   const description = formData.get('description') as string
   const probability = adjustProbability(Number(formData.get('probability') as string), description)
+
   const updatedTask: Partial<Omit<Task, 'id' | 'createdAt'>> = {
     name: formData.get('taskName') as string,
     description,
